@@ -1,0 +1,9 @@
+os
+uuid
+pathlib
+pydub
+whisper
+gradio
+deep-translator
+elevenlabs
+python-dotenv
