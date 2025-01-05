@@ -27,7 +27,7 @@ Clone the repository:
 
 bash
 Copy
-git clone https://github.com/your-username/tower-of-babel.git
+git clone https://github.com/CalebLai1/TheRealTowerOfBabel.git
 cd tower-of-babel
 Install the required dependencies:
 
