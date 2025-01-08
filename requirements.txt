@@ -2,3 +2,7 @@ numpy
 sounddevice
 whisper
 torch
+deep-translator
+requests
+playsound
+scipy
