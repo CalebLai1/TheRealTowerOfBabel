@@ -2,58 +2,52 @@
 
 import whisper
 import torch
-import wave
+import numpy as np
 import os
 from datetime import datetime
 from tkinter import messagebox
-import numpy as np
 
 class TranscriptionHandler:
     def __init__(self, language_code="en", use_cuda=False):
         self.language_code = language_code
         self.use_cuda = use_cuda
-        self.model = whisper.load_model("base")  # Default model
+        self.model = whisper.load_model("small")  # Use a smaller model for faster transcription
 
         if self.use_cuda and torch.cuda.is_available():
-            self.model = self.model.cuda()
+            self.model = self.model.cuda()  # Move model to GPU
 
     def update_model(self, model_size, use_cuda=False):
         """Update the Whisper model based on user selection."""
         self.use_cuda = use_cuda
         self.model = whisper.load_model(model_size)
         if self.use_cuda and torch.cuda.is_available():
-            self.model = self.model.cuda()
+            self.model = self.model.cuda()  # Move model to GPU
 
     def update_language(self, language_code):
         """Update the language for transcription."""
         self.language_code = language_code
 
     def transcribe_audio_chunk(self, audio_buffer, sample_rate, channels):
-        """Transcribe a chunk of audio."""
-        temp_file = f"temp_audio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+        """Transcribe a chunk of audio directly without writing to a file."""
         try:
             # Normalize the audio buffer to avoid clipping
             audio_buffer = audio_buffer / np.max(np.abs(audio_buffer))
 
-            # Write the audio buffer to a temporary WAV file
-            with wave.open(temp_file, 'w') as wf:
-                wf.setnchannels(channels)
-                wf.setsampwidth(2)  # 16-bit audio
-                wf.setframerate(sample_rate)
-                wf.writeframes((audio_buffer * 32767).astype(np.int16).tobytes())
+            # Resample the audio buffer to 16kHz if necessary (Whisper expects 16kHz audio)
+            if sample_rate != 16000:
+                from scipy.signal import resample
+                num_samples = int(len(audio_buffer) * 16000 / sample_rate)
+                audio_buffer = resample(audio_buffer, num_samples)
+                sample_rate = 16000
 
-            # Transcribe the audio using Whisper
+            # Transcribe the audio buffer directly
             result = self.model.transcribe(
-                temp_file,
+                audio_buffer.astype(np.float32),  # Ensure the buffer is in float32 format
+                fp16=True,  # Enable fp16 for faster GPU computation
                 language=self.language_code,
-                fp16=self.use_cuda,
                 no_speech_threshold=0.5,  # Adjust sensitivity to avoid misinterpreting silence
                 logprob_threshold=-0.5,   # Adjust to filter out low-confidence transcriptions
             )
-
-            # Clean up the temporary file
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
 
             return result["text"].strip()
 

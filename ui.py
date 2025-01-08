@@ -1,5 +1,3 @@
-# ui.py
-
 import tkinter as tk
 from tkinter import ttk, scrolledtext, font, messagebox
 from audio_handler import AudioHandler
@@ -18,10 +16,10 @@ class VoiceTypingAppUI:
         self.root.title("Whisper Voice Typing")
         self.root.geometry("900x800")
         self.audio_handler = AudioHandler()
-        self.transcription_handler = TranscriptionHandler()
+        self.transcription_handler = TranscriptionHandler(use_cuda=True)
         self.use_cuda = torch.cuda.is_available()
         if self.use_cuda:
-            self.transcription_handler.update_model("base", use_cuda=True)
+            self.transcription_handler.update_model("small", use_cuda=True)
         self.is_recording = False
         self.audio_queue = queue.Queue()
         self.audio_buffer = np.array([], dtype=np.float32)
@@ -35,11 +33,9 @@ class VoiceTypingAppUI:
         self.root.configure(bg=self.bg_color)
         self.custom_font = font.Font(family="Helvetica", size=12)
 
-        # Create a frame for the text boxes
         text_frame = tk.Frame(self.root, bg=self.bg_color)
         text_frame.pack(padx=20, pady=20, expand=True, fill='both')
 
-        # Transcription Text Box
         self.transcription_text_box = scrolledtext.ScrolledText(
             text_frame,
             wrap=tk.WORD,
@@ -53,7 +49,6 @@ class VoiceTypingAppUI:
         )
         self.transcription_text_box.pack(side=tk.LEFT, padx=10, expand=True, fill='both')
 
-        # Translation Text Box
         self.translation_text_box = scrolledtext.ScrolledText(
             text_frame,
             wrap=tk.WORD,
@@ -67,11 +62,9 @@ class VoiceTypingAppUI:
         )
         self.translation_text_box.pack(side=tk.LEFT, padx=10, expand=True, fill='both')
 
-        # Create control buttons frame
         button_frame = tk.Frame(self.root, bg=self.bg_color)
         button_frame.pack(pady=10)
 
-        # Start/Stop Recording button
         self.record_button = tk.Button(
             button_frame,
             text="Start Recording",
@@ -87,7 +80,6 @@ class VoiceTypingAppUI:
         )
         self.record_button.pack(side=tk.LEFT, padx=10)
 
-        # Clear Text button
         self.clear_button = tk.Button(
             button_frame,
             text="Clear Text",
@@ -103,7 +95,6 @@ class VoiceTypingAppUI:
         )
         self.clear_button.pack(side=tk.LEFT, padx=10)
 
-        # Test Audio Input button
         self.test_input_button = tk.Button(
             button_frame,
             text="Test Audio Input",
@@ -119,7 +110,6 @@ class VoiceTypingAppUI:
         )
         self.test_input_button.pack(side=tk.LEFT, padx=10)
 
-        # Test Audio Output button
         self.test_output_button = tk.Button(
             button_frame,
             text="Test Audio Output",
@@ -135,7 +125,6 @@ class VoiceTypingAppUI:
         )
         self.test_output_button.pack(side=tk.LEFT, padx=10)
 
-        # Add a dropdown for Whisper model
         self.model_var = tk.StringVar()
         self.model_dropdown = ttk.Combobox(
             button_frame,
@@ -145,11 +134,10 @@ class VoiceTypingAppUI:
             state="readonly",
             width=10
         )
-        self.model_dropdown.set("base")
+        self.model_dropdown.set("small")
         self.model_dropdown.pack(side=tk.LEFT, padx=10)
         self.model_dropdown.bind("<<ComboboxSelected>>", self.change_model)
 
-        # Add a dropdown for input language
         self.language_var = tk.StringVar()
         self.language_dropdown = ttk.Combobox(
             button_frame,
@@ -163,7 +151,6 @@ class VoiceTypingAppUI:
         self.language_dropdown.pack(side=tk.LEFT, padx=10)
         self.language_dropdown.bind("<<ComboboxSelected>>", self.change_language)
 
-        # Add a dropdown for translation language
         self.translation_language_var = tk.StringVar()
         self.translation_language_dropdown = ttk.Combobox(
             button_frame,
@@ -173,11 +160,10 @@ class VoiceTypingAppUI:
             state="readonly",
             width=15
         )
-        self.translation_language_dropdown.set("Spanish")  # Default translation language
+        self.translation_language_dropdown.set("Spanish")
         self.translation_language_dropdown.pack(side=tk.LEFT, padx=10)
         self.translation_language_dropdown.bind("<<ComboboxSelected>>", self.change_translation_language)
 
-        # Slider for chunk size
         slider_frame = tk.Frame(self.root, bg=self.bg_color)
         slider_frame.pack(pady=10)
         self.chunk_size_slider = tk.Scale(
@@ -197,10 +183,9 @@ class VoiceTypingAppUI:
             activebackground=self.accent_color,
             command=self.update_chunk_size_from_slider
         )
-        self.chunk_size_slider.set(3.0)
+        self.chunk_size_slider.set(2.0)
         self.chunk_size_slider.pack(side=tk.LEFT, padx=10)
 
-        # Entry for precise chunk size input
         self.chunk_size_entry = tk.Entry(
             slider_frame,
             width=5,
@@ -210,10 +195,9 @@ class VoiceTypingAppUI:
             insertbackground=self.fg_color,
             relief=tk.FLAT
         )
-        self.chunk_size_entry.insert(0, "3.0")
+        self.chunk_size_entry.insert(0, "2.0")
         self.chunk_size_entry.pack(side=tk.LEFT, padx=10)
 
-        # Apply button for chunk size
         self.apply_button = tk.Button(
             slider_frame,
             text="Apply",
@@ -228,7 +212,6 @@ class VoiceTypingAppUI:
         )
         self.apply_button.pack(side=tk.LEFT, padx=10)
 
-        # Device selection frame
         device_frame = tk.Frame(self.root, bg=self.bg_color)
         device_frame.pack(pady=10)
         self.input_device_var = tk.StringVar()
@@ -267,34 +250,29 @@ class VoiceTypingAppUI:
         self.output_device_dropdown.pack(side=tk.LEFT, padx=10)
         self.audio_handler.populate_audio_devices(self.input_device_dropdown, self.output_device_dropdown)
 
-        # Add a progress bar for chunk processing visualization
-        self.progress_frame = tk.Frame(self.root, bg=self.bg_color)
-        self.progress_frame.pack(pady=10)
+        self.timer_frame = tk.Frame(self.root, bg=self.bg_color)
+        self.timer_frame.pack(pady=10)
 
-        self.progress_label = tk.Label(
-            self.progress_frame,
-            text="Chunk Progress:",
+        self.timer_label = tk.Label(
+            self.timer_frame,
+            text="Chunk Timer: 0.00s",
             bg=self.bg_color,
             fg=self.fg_color,
             font=self.custom_font
         )
-        self.progress_label.pack(side=tk.LEFT, padx=10)
+        self.timer_label.pack(side=tk.LEFT, padx=10)
 
-        self.progress_bar = ttk.Progressbar(
-            self.progress_frame,
-            orient=tk.HORIZONTAL,
-            length=300,
-            mode="determinate"
+        self.transcription_timer_label = tk.Label(
+            self.timer_frame,
+            text="Transcription Time: 0.00s",
+            bg=self.bg_color,
+            fg=self.fg_color,
+            font=self.custom_font
         )
-        self.progress_bar.pack(side=tk.LEFT, padx=10)
+        self.transcription_timer_label.pack(side=tk.LEFT, padx=10)
 
-        # Initialize progress bar value
-        self.progress_bar["value"] = 0
-        self.progress_bar["maximum"] = 100  # Represents 100% of the chunk duration
-
-        # Add a flashing label for chunk reset visualization
         self.flash_label = tk.Label(
-            self.progress_frame,
+            self.timer_frame,
             text="Chunk Reset",
             bg=self.bg_color,
             fg=self.fg_color,
@@ -302,13 +280,15 @@ class VoiceTypingAppUI:
         )
         self.flash_label.pack(side=tk.LEFT, padx=10)
 
-    def update_progress_bar(self, value):
-        """Update the progress bar to the given value."""
-        self.progress_bar["value"] = value
-        self.progress_bar.update()
+    def update_timer(self, elapsed_time):
+        self.timer_label.config(text=f"Chunk Timer: {elapsed_time:.2f}s")
+        self.timer_label.update()
+
+    def update_transcription_timer(self, transcription_time):
+        self.transcription_timer_label.config(text=f"Transcription Time: {transcription_time:.2f}s")
+        self.transcription_timer_label.update()
 
     def flash_reset_label(self):
-        """Flash the label to indicate a chunk reset."""
         self.flash_label.config(fg="red")
         self.root.after(200, lambda: self.flash_label.config(fg=self.fg_color))
 
@@ -379,7 +359,7 @@ class VoiceTypingAppUI:
     def process_audio(self):
         chunk_duration = self.chunk_size_slider.get()
         chunk_samples = int(self.audio_handler.sample_rate * chunk_duration)
-        overlap_duration = 0.5  # Overlap duration in seconds (adjust as needed)
+        overlap_duration = 0.3
         overlap_samples = int(self.audio_handler.sample_rate * overlap_duration)
 
         while self.is_recording:
@@ -388,38 +368,31 @@ class VoiceTypingAppUI:
                     audio_chunk = self.audio_queue.get()
                     self.audio_buffer = np.append(self.audio_buffer, audio_chunk.flatten())
 
-                    # Update the progress bar based on the buffer size
-                    progress = (len(self.audio_buffer) / chunk_samples) * 100
-                    self.root.after(0, self.update_progress_bar, progress)
+                    elapsed_time = len(self.audio_buffer) / self.audio_handler.sample_rate
+                    self.root.after(0, self.update_timer, elapsed_time)
 
-                    # Process the audio buffer when it reaches the chunk size
                     if len(self.audio_buffer) >= chunk_samples:
-                        # Extract the chunk to process
                         chunk_to_process = self.audio_buffer[:chunk_samples]
 
-                        # Transcribe the chunk
+                        start_time = time.time()
                         transcription = self.transcription_handler.transcribe_audio_chunk(
                             chunk_to_process,
                             sample_rate=self.audio_handler.sample_rate,
                             channels=self.audio_handler.channels
                         )
+                        transcription_time = time.time() - start_time
+                        self.root.after(0, self.update_transcription_timer, transcription_time)
 
                         if transcription:
-                            # Translate the transcription
                             translation = self.translate_text(transcription)
-
-                            # Update the GUI with the transcription and translation
                             self.root.after(0, self.update_transcription_text, transcription)
                             self.root.after(0, self.update_translation_text, translation)
 
-                        # Retain the last `overlap_samples` for the next chunk
                         self.audio_buffer = self.audio_buffer[-overlap_samples:]
-
-                        # Reset the progress bar and flash the label
-                        self.root.after(0, self.update_progress_bar, 0)
+                        self.root.after(0, self.update_timer, 0.0)
                         self.root.after(0, self.flash_reset_label)
                 else:
-                    time.sleep(0.1)  # Sleep briefly to avoid busy-waiting
+                    time.sleep(0.1)
             except Exception as e:
                 print(f"Error in processing audio: {e}")
                 self.is_recording = False
@@ -484,7 +457,7 @@ class VoiceTypingAppUI:
         self.transcription_handler.update_language(language_code)
 
     def change_translation_language(self, event):
-        pass  # No action needed here, as translation language is used directly in translate_text
+        pass
 
     def run(self):
-        self.root.mainloop()    
+        self.root.mainloop()
