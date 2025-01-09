@@ -1,0 +1,10 @@
+sounddevice==0.4.6
+soundfile==0.12.1
+numpy==1.24.3
+requests==2.31.0
+vosk==0.3.45
+whisper==1.0.0
+torch==2.0.1
+deep-translator==1.11.4
+ttkbootstrap==1.10.1
+tkinter==0.1.0
