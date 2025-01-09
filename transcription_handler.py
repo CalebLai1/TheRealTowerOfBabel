@@ -1,17 +1,15 @@
-# transcription_handler.py
-
 import whisper
 import torch
 import numpy as np
 import os
-from datetime import datetime
 from tkinter import messagebox
+from scipy.signal import resample  # Import resample once at the top
 
 class TranscriptionHandler:
     def __init__(self, language_code="en", use_cuda=False):
         self.language_code = language_code
         self.use_cuda = use_cuda
-        self.model = whisper.load_model("small")  # Use a smaller model for faster transcription
+        self.model = whisper.load_model("base")  # Use "base" for better speed-accuracy balance
 
         if self.use_cuda and torch.cuda.is_available():
             self.model = self.model.cuda()  # Move model to GPU
@@ -35,7 +33,6 @@ class TranscriptionHandler:
 
             # Resample the audio buffer to 16kHz if necessary (Whisper expects 16kHz audio)
             if sample_rate != 16000:
-                from scipy.signal import resample
                 num_samples = int(len(audio_buffer) * 16000 / sample_rate)
                 audio_buffer = resample(audio_buffer, num_samples)
                 sample_rate = 16000
@@ -43,7 +40,7 @@ class TranscriptionHandler:
             # Transcribe the audio buffer directly
             result = self.model.transcribe(
                 audio_buffer.astype(np.float32),  # Ensure the buffer is in float32 format
-                fp16=True,  # Enable fp16 for faster GPU computation
+                fp16=self.use_cuda,  # Enable fp16 for faster GPU computation
                 language=self.language_code,
                 no_speech_threshold=0.5,  # Adjust sensitivity to avoid misinterpreting silence
                 logprob_threshold=-0.5,   # Adjust to filter out low-confidence transcriptions

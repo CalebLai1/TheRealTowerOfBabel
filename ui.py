@@ -19,14 +19,14 @@ class VoiceTypingAppUI:
         self.root.title("Whisper Voice Typing")
         self.root.geometry("1200x800")
         self.audio_handler = AudioHandler()
-        self.transcription_handler = TranscriptionHandler(use_cuda=True)
         self.use_cuda = torch.cuda.is_available()
+        self.transcription_handler = TranscriptionHandler(use_cuda=self.use_cuda)
         if self.use_cuda:
-            self.transcription_handler.update_model("small", use_cuda=True)
+            self.transcription_handler.update_model("base", use_cuda=True)
         self.is_recording = False
         self.audio_queue = queue.Queue()
         self.audio_buffer = np.array([], dtype=np.float32)
-        self.audio_files = []  # List to store generated audio files
+        self.audio_files = []
         self.setup_ui()
 
     def setup_ui(self):
@@ -37,12 +37,132 @@ class VoiceTypingAppUI:
         self.root.configure(bg=self.bg_color)
         self.custom_font = font.Font(family="Helvetica", size=12)
 
-        self.setup_api_controls()
+        self.gpu_status_label = tk.Label(
+            self.root,
+            text=f"GPU Acceleration: {'Enabled' if self.use_cuda else 'Disabled'}",
+            font=self.custom_font,
+            fg="green" if self.use_cuda else "red",
+        )
+        self.gpu_status_label.pack(pady=10)
+
+        api_frame = tk.Frame(self.root, bg=self.bg_color)
+        api_frame.pack(pady=10)
+
+        api_key_label = tk.Label(
+            api_frame,
+            text="ElevenLabs API Key:",
+            bg=self.bg_color,
+            fg=self.fg_color,
+            font=self.custom_font,
+        )
+        api_key_label.pack(side=tk.LEFT, padx=10)
+
+        self.api_key_entry = tk.Entry(
+            api_frame,
+            width=40,
+            font=self.custom_font,
+            bg=self.text_bg_color,
+            fg=self.fg_color,
+            insertbackground=self.fg_color,
+            relief=tk.FLAT,
+        )
+        self.api_key_entry.pack(side=tk.LEFT, padx=10)
+
+        voice_id_label = tk.Label(
+            api_frame,
+            text="Voice ID:",
+            bg=self.bg_color,
+            fg=self.fg_color,
+            font=self.custom_font,
+        )
+        voice_id_label.pack(side=tk.LEFT, padx=10)
+
+        self.voice_id_entry = tk.Entry(
+            api_frame,
+            width=20,
+            font=self.custom_font,
+            bg=self.text_bg_color,
+            fg=self.fg_color,
+            insertbackground=self.fg_color,
+            relief=tk.FLAT,
+        )
+        self.voice_id_entry.pack(side=tk.LEFT, padx=10)
+
+        language_frame = tk.Frame(self.root, bg=self.bg_color)
+        language_frame.pack(pady=10)
+
+        input_language_label = tk.Label(
+            language_frame,
+            text="Input Language:",
+            bg=self.bg_color,
+            fg=self.fg_color,
+            font=self.custom_font,
+        )
+        input_language_label.pack(side=tk.LEFT, padx=10)
+
+        self.language_var = tk.StringVar()
+        self.language_dropdown = ttk.Combobox(
+            language_frame,
+            textvariable=self.language_var,
+            values=list(LANGUAGES.keys()),
+            font=self.custom_font,
+            state="readonly",
+            width=15,
+        )
+        self.language_dropdown.set("English")
+        self.language_dropdown.pack(side=tk.LEFT, padx=10)
+        self.language_dropdown.bind("<<ComboboxSelected>>", self.change_language)
+
+        translation_language_label = tk.Label(
+            language_frame,
+            text="Translation Language:",
+            bg=self.bg_color,
+            fg=self.fg_color,
+            font=self.custom_font,
+        )
+        translation_language_label.pack(side=tk.LEFT, padx=10)
+
+        self.translation_language_var = tk.StringVar()
+        self.translation_language_dropdown = ttk.Combobox(
+            language_frame,
+            textvariable=self.translation_language_var,
+            values=list(LANGUAGES.keys()),
+            font=self.custom_font,
+            state="readonly",
+            width=15,
+        )
+        self.translation_language_dropdown.set("Spanish")
+        self.translation_language_dropdown.pack(side=tk.LEFT, padx=10)
+        self.translation_language_dropdown.bind("<<ComboboxSelected>>", self.change_translation_language)
+
+        model_frame = tk.Frame(self.root, bg=self.bg_color)
+        model_frame.pack(pady=10)
+
+        model_label = tk.Label(
+            model_frame,
+            text="Whisper Model:",
+            bg=self.bg_color,
+            fg=self.fg_color,
+            font=self.custom_font,
+        )
+        model_label.pack(side=tk.LEFT, padx=10)
+
+        self.model_var = tk.StringVar()
+        self.model_dropdown = ttk.Combobox(
+            model_frame,
+            textvariable=self.model_var,
+            values=["tiny", "base", "small", "medium", "large"],
+            font=self.custom_font,
+            state="readonly",
+            width=10,
+        )
+        self.model_dropdown.set("base")
+        self.model_dropdown.pack(side=tk.LEFT, padx=10)
+        self.model_dropdown.bind("<<ComboboxSelected>>", self.change_model)
 
         text_frame = tk.Frame(self.root, bg=self.bg_color)
         text_frame.pack(padx=20, pady=20, expand=True, fill='both')
 
-        # Transcription Text Box (Left)
         self.transcription_text_box = scrolledtext.ScrolledText(
             text_frame,
             wrap=tk.WORD,
@@ -52,11 +172,10 @@ class VoiceTypingAppUI:
             bg=self.text_bg_color,
             fg=self.fg_color,
             insertbackground=self.fg_color,
-            selectbackground=self.accent_color
+            selectbackground=self.accent_color,
         )
         self.transcription_text_box.pack(side=tk.LEFT, padx=10, expand=True, fill='both')
 
-        # Translation Text Box (Middle)
         self.translation_text_box = scrolledtext.ScrolledText(
             text_frame,
             wrap=tk.WORD,
@@ -66,30 +185,15 @@ class VoiceTypingAppUI:
             bg=self.text_bg_color,
             fg=self.fg_color,
             insertbackground=self.fg_color,
-            selectbackground=self.accent_color
+            selectbackground=self.accent_color,
         )
         self.translation_text_box.pack(side=tk.LEFT, padx=10, expand=True, fill='both')
 
-        # Audio Files Grid (Right)
         audio_frame = tk.Frame(text_frame, bg=self.bg_color)
         audio_frame.pack(side=tk.LEFT, padx=10, expand=True, fill='both')
 
         self.audio_files_grid = tk.Frame(audio_frame, bg=self.bg_color)
         self.audio_files_grid.pack(side=tk.TOP, pady=10)
-
-        self.play_button = tk.Button(
-            audio_frame,
-            text="Play",
-            command=self.play_selected_audio,
-            width=10,
-            bg=self.accent_color,
-            fg=self.fg_color,
-            font=self.custom_font,
-            relief=tk.FLAT,
-            activebackground=self.bg_color,
-            activeforeground=self.fg_color
-        )
-        self.play_button.pack(side=tk.TOP, pady=10)
 
         button_frame = tk.Frame(self.root, bg=self.bg_color)
         button_frame.pack(pady=10)
@@ -105,7 +209,7 @@ class VoiceTypingAppUI:
             font=self.custom_font,
             relief=tk.FLAT,
             activebackground=self.bg_color,
-            activeforeground=self.fg_color
+            activeforeground=self.fg_color,
         )
         self.record_button.pack(side=tk.LEFT, padx=10)
 
@@ -120,7 +224,7 @@ class VoiceTypingAppUI:
             font=self.custom_font,
             relief=tk.FLAT,
             activebackground=self.bg_color,
-            activeforeground=self.fg_color
+            activeforeground=self.fg_color,
         )
         self.clear_button.pack(side=tk.LEFT, padx=10)
 
@@ -135,7 +239,7 @@ class VoiceTypingAppUI:
             font=self.custom_font,
             relief=tk.FLAT,
             activebackground=self.bg_color,
-            activeforeground=self.fg_color
+            activeforeground=self.fg_color,
         )
         self.test_input_button.pack(side=tk.LEFT, padx=10)
 
@@ -150,51 +254,13 @@ class VoiceTypingAppUI:
             font=self.custom_font,
             relief=tk.FLAT,
             activebackground=self.bg_color,
-            activeforeground=self.fg_color
+            activeforeground=self.fg_color,
         )
         self.test_output_button.pack(side=tk.LEFT, padx=10)
 
-        self.model_var = tk.StringVar()
-        self.model_dropdown = ttk.Combobox(
-            button_frame,
-            textvariable=self.model_var,
-            values=["tiny", "base", "small", "medium", "large"],
-            font=self.custom_font,
-            state="readonly",
-            width=10
-        )
-        self.model_dropdown.set("small")
-        self.model_dropdown.pack(side=tk.LEFT, padx=10)
-        self.model_dropdown.bind("<<ComboboxSelected>>", self.change_model)
-
-        self.language_var = tk.StringVar()
-        self.language_dropdown = ttk.Combobox(
-            button_frame,
-            textvariable=self.language_var,
-            values=list(LANGUAGES.keys()),
-            font=self.custom_font,
-            state="readonly",
-            width=15
-        )
-        self.language_dropdown.set("English")
-        self.language_dropdown.pack(side=tk.LEFT, padx=10)
-        self.language_dropdown.bind("<<ComboboxSelected>>", self.change_language)
-
-        self.translation_language_var = tk.StringVar()
-        self.translation_language_dropdown = ttk.Combobox(
-            button_frame,
-            textvariable=self.translation_language_var,
-            values=list(LANGUAGES.keys()),
-            font=self.custom_font,
-            state="readonly",
-            width=15
-        )
-        self.translation_language_dropdown.set("Spanish")
-        self.translation_language_dropdown.pack(side=tk.LEFT, padx=10)
-        self.translation_language_dropdown.bind("<<ComboboxSelected>>", self.change_translation_language)
-
         slider_frame = tk.Frame(self.root, bg=self.bg_color)
         slider_frame.pack(pady=10)
+
         self.chunk_size_slider = tk.Scale(
             slider_frame,
             from_=0.1,
@@ -210,9 +276,9 @@ class VoiceTypingAppUI:
             font=self.custom_font,
             sliderrelief=tk.FLAT,
             activebackground=self.accent_color,
-            command=self.update_chunk_size_from_slider
+            command=self.update_chunk_size_from_slider,
         )
-        self.chunk_size_slider.set(2.0)
+        self.chunk_size_slider.set(1.0)
         self.chunk_size_slider.pack(side=tk.LEFT, padx=10)
 
         self.chunk_size_entry = tk.Entry(
@@ -222,9 +288,9 @@ class VoiceTypingAppUI:
             bg=self.text_bg_color,
             fg=self.fg_color,
             insertbackground=self.fg_color,
-            relief=tk.FLAT
+            relief=tk.FLAT,
         )
-        self.chunk_size_entry.insert(0, "2.0")
+        self.chunk_size_entry.insert(0, "1.0")
         self.chunk_size_entry.pack(side=tk.LEFT, padx=10)
 
         self.apply_button = tk.Button(
@@ -237,46 +303,51 @@ class VoiceTypingAppUI:
             font=self.custom_font,
             relief=tk.FLAT,
             activebackground=self.bg_color,
-            activeforeground=self.fg_color
+            activeforeground=self.fg_color,
         )
         self.apply_button.pack(side=tk.LEFT, padx=10)
 
         device_frame = tk.Frame(self.root, bg=self.bg_color)
         device_frame.pack(pady=10)
+
         self.input_device_var = tk.StringVar()
         self.input_device_label = tk.Label(
             device_frame,
             text="Input Device:",
             bg=self.bg_color,
             fg=self.fg_color,
-            font=self.custom_font
+            font=self.custom_font,
         )
         self.input_device_label.pack(side=tk.LEFT, padx=10)
+
         self.input_device_dropdown = ttk.Combobox(
             device_frame,
             textvariable=self.input_device_var,
             font=self.custom_font,
             state="readonly",
-            width=50
+            width=50,
         )
         self.input_device_dropdown.pack(side=tk.LEFT, padx=10)
+
         self.output_device_var = tk.StringVar()
         self.output_device_label = tk.Label(
             device_frame,
             text="Output Device:",
             bg=self.bg_color,
             fg=self.fg_color,
-            font=self.custom_font
+            font=self.custom_font,
         )
         self.output_device_label.pack(side=tk.LEFT, padx=10)
+
         self.output_device_dropdown = ttk.Combobox(
             device_frame,
             textvariable=self.output_device_var,
             font=self.custom_font,
             state="readonly",
-            width=50
+            width=50,
         )
         self.output_device_dropdown.pack(side=tk.LEFT, padx=10)
+
         self.audio_handler.populate_audio_devices(self.input_device_dropdown, self.output_device_dropdown)
 
         self.timer_frame = tk.Frame(self.root, bg=self.bg_color)
@@ -287,7 +358,7 @@ class VoiceTypingAppUI:
             text="Chunk Timer: 0.00s",
             bg=self.bg_color,
             fg=self.fg_color,
-            font=self.custom_font
+            font=self.custom_font,
         )
         self.timer_label.pack(side=tk.LEFT, padx=10)
 
@@ -296,7 +367,7 @@ class VoiceTypingAppUI:
             text="Transcription Time: 0.00s",
             bg=self.bg_color,
             fg=self.fg_color,
-            font=self.custom_font
+            font=self.custom_font,
         )
         self.transcription_timer_label.pack(side=tk.LEFT, padx=10)
 
@@ -305,53 +376,9 @@ class VoiceTypingAppUI:
             text="Chunk Reset",
             bg=self.bg_color,
             fg=self.fg_color,
-            font=self.custom_font
+            font=self.custom_font,
         )
         self.flash_label.pack(side=tk.LEFT, padx=10)
-
-    def setup_api_controls(self):
-        api_frame = tk.Frame(self.root, bg=self.bg_color)
-        api_frame.pack(pady=10)
-
-        api_key_label = tk.Label(
-            api_frame,
-            text="11labs API Key:",
-            bg=self.bg_color,
-            fg=self.fg_color,
-            font=self.custom_font
-        )
-        api_key_label.pack(side=tk.LEFT, padx=10)
-
-        self.api_key_entry = tk.Entry(
-            api_frame,
-            width=40,
-            font=self.custom_font,
-            bg=self.text_bg_color,
-            fg=self.fg_color,
-            insertbackground=self.fg_color,
-            relief=tk.FLAT
-        )
-        self.api_key_entry.pack(side=tk.LEFT, padx=10)
-
-        voice_id_label = tk.Label(
-            api_frame,
-            text="Voice ID:",
-            bg=self.bg_color,
-            fg=self.fg_color,
-            font=self.custom_font
-        )
-        voice_id_label.pack(side=tk.LEFT, padx=10)
-
-        self.voice_id_entry = tk.Entry(
-            api_frame,
-            width=20,
-            font=self.custom_font,
-            bg=self.text_bg_color,
-            fg=self.fg_color,
-            insertbackground=self.fg_color,
-            relief=tk.FLAT
-        )
-        self.voice_id_entry.pack(side=tk.LEFT, padx=10)
 
     def update_timer(self, elapsed_time):
         self.timer_label.config(text=f"Chunk Timer: {elapsed_time:.2f}s")
@@ -384,9 +411,8 @@ class VoiceTypingAppUI:
     def clear_text(self):
         self.transcription_text_box.delete(1.0, tk.END)
         self.translation_text_box.delete(1.0, tk.END)
-        self.audio_files_var.set("")
-        self.audio_files_dropdown["values"] = []
         self.audio_files = []
+        self.update_audio_files_grid()
         messagebox.showinfo("Text Cleared", "The text boxes and audio files have been cleared.")
 
     def toggle_recording(self):
@@ -435,7 +461,7 @@ class VoiceTypingAppUI:
     def process_audio(self):
         chunk_duration = self.chunk_size_slider.get()
         chunk_samples = int(self.audio_handler.sample_rate * chunk_duration)
-        overlap_duration = 0.3
+        overlap_duration = 0.2
         overlap_samples = int(self.audio_handler.sample_rate * overlap_duration)
 
         while self.is_recording:
@@ -508,11 +534,9 @@ class VoiceTypingAppUI:
             return None
 
     def update_audio_files_grid(self):
-        # Clear the existing grid
         for widget in self.audio_files_grid.winfo_children():
             widget.destroy()
 
-        # Create a new grid of buttons for each audio file
         for i, audio_file in enumerate(self.audio_files):
             button_frame = tk.Frame(self.audio_files_grid, bg=self.bg_color)
             button_frame.grid(row=i // 4, column=i % 4, padx=5, pady=5)
@@ -528,7 +552,7 @@ class VoiceTypingAppUI:
                 font=self.custom_font,
                 relief=tk.FLAT,
                 activebackground=self.bg_color,
-                activeforeground=self.fg_color
+                activeforeground=self.fg_color,
             )
             play_button.pack(side=tk.LEFT, padx=2)
 
@@ -538,12 +562,12 @@ class VoiceTypingAppUI:
                 command=lambda idx=i: self.delete_audio_file(idx),
                 width=2,
                 height=1,
-                bg="#BF616A",  # Red color for delete button
+                bg="#BF616A",
                 fg=self.fg_color,
                 font=self.custom_font,
                 relief=tk.FLAT,
                 activebackground=self.bg_color,
-                activeforeground=self.fg_color
+                activeforeground=self.fg_color,
             )
             delete_button.pack(side=tk.LEFT, padx=2)
 
@@ -551,10 +575,10 @@ class VoiceTypingAppUI:
         if 0 <= index < len(self.audio_files):
             audio_file = self.audio_files.pop(index)
             try:
-                os.remove(audio_file)  # Delete the file from the filesystem
+                os.remove(audio_file)
             except Exception as e:
                 print(f"Error deleting audio file: {e}")
-            self.update_audio_files_grid()  # Update the grid to reflect the changes
+            self.update_audio_files_grid()
 
     def play_selected_audio(self, audio_file=None):
         if audio_file is None:

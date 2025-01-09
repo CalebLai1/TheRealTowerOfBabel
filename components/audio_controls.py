@@ -5,6 +5,8 @@ import numpy as np
 import queue
 import time
 from audio_handler import AudioHandler
+from constants import LANGUAGES
+from deep_translator import GoogleTranslator
 
 class AudioControls:
     def __init__(self, root, audio_handler, transcription_handler, record_button, test_input_button, test_output_button, timer_label, transcription_timer_label, flash_label, chunk_size_slider):
